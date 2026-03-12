@@ -1,3 +1,22 @@
+
+
+import sys
+import subprocess
+
+
+try:
+    import onnxruntime
+    import PIL
+    import torchvision
+except ImportError:
+    print("📦 Installing required dependencies... This may take a moment.")
+    subprocess.check_call([
+        sys.executable, "-m", "pip", "install", "-q",
+        "onnxruntime>=1.16.0", "numpy>=1.24.0", "Pillow>=10.0.0",
+        "torchvision>=0.16.0", "torch>=2.1.0"
+    ])
+    print("✅ Dependencies installed successfully!\n")
+
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk
@@ -6,10 +25,11 @@ import numpy as np
 import torchvision.transforms as transforms
 import os
 
+
 MODEL_PATH = "model/iris-vit.onnx"
 CLASSES = ["No DR", "Mild DR", "Moderate DR", "Severe DR", "Proliferative DR"]
 
-# Define preprocessing (matches the original Colab code)
+
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -120,4 +140,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = RetinaApp(root)
     root.mainloop()
-
