@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>onnx-vlm - Edge AI</title>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        slate: { 850: '#151e2e', 900: '#0f172a', 950: '#020617', }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- ONNX Runtime Web -->
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+</head>
+<body class="bg-slate-950 min-h-screen flex flex-col items-center justify-center p-3 sm:p-6 text-slate-200 antialiased">
+
+    <!-- Main App Container -->
+    <div class="max-w-5xl w-full bg-slate-900 rounded-3xl shadow-2xl shadow-black/50 ring-1 ring-white/10 overflow-hidden flex flex-col">
+        
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-indigo-950 to-slate-900 border-b border-white/5 p-5 sm:p-8 text-center relative overflow-hidden">
+            <div class="absolute top-0 left-1/4 w-48 h-48 bg-indigo-600/20 blur-3xl rounded-full pointer-events-none"></div>
+            <div class="absolute bottom-0 right-1/4 w-48 h-48 bg-purple-600/10 blur-3xl rounded-full pointer-events-none"></div>
+            
+            <div class="relative z-10 flex flex-col items-center">
+                <div class="flex items-center justify-center space-x-3 mb-2">
+                    <div class="p-2 bg-indigo-500/20 rounded-xl ring-1 ring-indigo-500/30 shadow-lg shadow-indigo-500/20">
+                        <svg class="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                        </svg>
+                    </div>
+                    <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">onnx-vlm</h1>
+                </div>
+                <h2 class="text-slate-400 font-medium text-sm sm:text-base tracking-wide">Diabetic Retinopathy Detection Edge AI</h2>
+            </div>
+        </header>
+
+        <!-- Model Status Bar -->
+        <div id="statusContainer" class="bg-indigo-500/10 border-b border-indigo-500/20 px-4 py-3 flex items-center justify-center transition-colors duration-300">
+            <svg id="statusIconLoading" class="animate-spin -ml-1 mr-3 h-4 w-4 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <svg id="statusIconSuccess" class="hidden -ml-1 mr-2 h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            <svg id="statusIconError" class="hidden -ml-1 mr-2 h-4 w-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <span id="statusText" class="text-xs sm:text-sm font-medium text-indigo-300 text-center">Fetching model from Hugging Face... (86MB)</span>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="p-4 sm:p-8 grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 items-stretch bg-slate-900">
+            
+            <!-- Left Column: Upload & Preview -->
+            <div class="flex flex-col h-full w-full">
+                <h3 class="text-sm font-semibold text-slate-300 mb-3 flex items-center">
+                    <span class="bg-slate-800 text-slate-400 w-5 h-5 rounded flex items-center justify-center mr-2 text-xs">1</span> 
+                    Upload Fundus Image
+                </h3>
+                
+                <input type="file" id="imageInput" accept="image/*" class="hidden">
+                
+                <!-- Interactive Dropzone -->
+                <div id="dropzone" class="relative group flex-grow flex flex-col items-center justify-center w-full min-h-[250px] sm:min-h-[300px] border-2 border-dashed border-slate-700 rounded-2xl bg-slate-850 hover:bg-slate-800 hover:border-indigo-500 transition-all duration-200 cursor-pointer overflow-hidden opacity-50 cursor-not-allowed">
+                    
+                    <div id="dropzoneContent" class="flex flex-col items-center text-center p-6 space-y-4">
+                        <div class="p-4 bg-slate-800 rounded-full shadow-lg group-hover:scale-110 transition-transform duration-200 ring-1 ring-white/5">
+                            <svg class="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-slate-200 font-medium text-base sm:text-lg">Tap or drag & drop</p>
+                            <p class="text-slate-500 text-xs sm:text-sm mt-1">PNG, JPG or JPEG</p>
+                        </div>
+                        <button id="uploadBtn" class="mt-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-6 rounded-xl text-sm shadow-lg shadow-indigo-900/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed z-10 w-full max-w-[200px]" disabled>
+                            Select Image
+                        </button>
+                    </div>
+
+                    <!-- Image Preview Overlay -->
+                    <img id="previewImage" class="absolute inset-0 w-full h-full object-contain bg-black/50 backdrop-blur-sm hidden z-0" alt="Fundus Preview">
+                    
+                    <div id="changeImageOverlay" class="absolute inset-0 bg-slate-950/60 hidden flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10 backdrop-blur-[2px]">
+                        <span class="bg-slate-800/90 border border-white/10 text-slate-200 font-medium px-4 py-2 rounded-lg shadow-2xl text-sm flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                            Change Scan
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Results -->
+            <div class="flex flex-col h-full w-full mt-6 lg:mt-0">
+                <h3 class="text-sm font-semibold text-slate-300 mb-3 flex items-center">
+                    <span class="bg-slate-800 text-slate-400 w-5 h-5 rounded flex items-center justify-center mr-2 text-xs">2</span> 
+                    AI Diagnosis
+                </h3>
+                
+                <!-- Initial / Empty State -->
+                <div id="emptyResult" class="flex-grow flex flex-col items-center justify-center p-6 sm:p-8 bg-slate-850 rounded-2xl border border-slate-800 text-center min-h-[250px] sm:min-h-[300px]">
+                    <div class="w-14 h-14 bg-slate-800 rounded-full flex items-center justify-center mb-4 text-slate-600 ring-1 ring-white/5">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    </div>
+                    <h4 class="text-slate-400 font-medium text-sm">Awaiting Image Input</h4>
+                    <p class="text-slate-500 text-xs mt-2 max-w-[220px]">Upload an image to trigger edge inference.</p>
+                </div>
+
+                <!-- Loading State -->
+                <div id="loadingResult" class="hidden flex-grow flex flex-col items-center justify-center p-6 sm:p-8 bg-indigo-950/20 rounded-2xl border border-indigo-500/20 text-center min-h-[250px] sm:min-h-[300px] relative overflow-hidden">
+                    <div class="absolute top-0 left-0 w-full h-1 bg-indigo-500 shadow-[0_0_15px_#6366f1] animate-[scan_2s_ease-in-out_infinite]"></div>
+                    <div class="relative w-16 h-16 mb-5">
+                        <div class="absolute inset-0 rounded-xl border-2 border-indigo-900 rotate-45"></div>
+                        <div class="absolute inset-0 rounded-xl border-2 border-indigo-500 border-t-transparent animate-spin"></div>
+                        <svg class="absolute inset-0 w-6 h-6 m-auto text-indigo-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    </div>
+                    <h4 class="text-indigo-300 font-semibold text-base sm:text-lg animate-pulse">Running ViT Engine...</h4>
+                    <p class="text-indigo-400/60 text-xs sm:text-sm mt-1">Extracting features via WASM backend</p>
+                </div>
+
+                <!-- Error State -->
+                <div id="errorResult" class="hidden flex-grow flex flex-col items-center justify-center p-6 sm:p-8 bg-rose-950/20 rounded-2xl border border-rose-500/20 text-center min-h-[250px] sm:min-h-[300px]">
+                    <div class="w-14 h-14 bg-rose-900/50 rounded-full flex items-center justify-center mb-4 text-rose-400 ring-1 ring-rose-500/30">
+                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </div>
+                    <h4 class="text-rose-400 font-medium text-sm mb-2">Inference Failed</h4>
+                    <p id="errorMsgText" class="text-rose-300/70 text-xs mt-2 max-w-[250px] break-words"></p>
+                </div>
+
+                <!-- Final Result State -->
+                <div id="actualResult" class="hidden flex-grow flex flex-col min-h-[250px] sm:min-h-[300px] rounded-2xl border shadow-xl overflow-hidden transition-all duration-500 bg-slate-850">
+                    <div id="resultHeader" class="p-5 sm:p-6 text-center border-b">
+                        <span id="resultConfidence" class="inline-block px-3 py-1 rounded border text-[10px] sm:text-xs font-bold tracking-wider uppercase mb-2"></span>
+                        <h2 id="resultTitle" class="text-2xl sm:text-3xl font-black tracking-tight mb-1 drop-shadow-md"></h2>
+                    </div>
+                    
+                    <div class="p-5 sm:p-6 flex-grow flex flex-col justify-center relative">
+                        <p id="resultDescription" class="text-slate-300 text-sm sm:text-[15px] leading-relaxed mb-6 text-center relative z-10"></p>
+                        <div class="mt-auto relative z-10">
+                            <div class="flex justify-between text-xs font-medium text-slate-400 mb-2">
+                                <span>Model Confidence</span>
+                                <span id="confidenceNumber" class="text-white font-bold">0%</span>
+                            </div>
+                            <div class="w-full bg-slate-800 rounded-full h-2 sm:h-2.5 overflow-hidden ring-1 ring-white/5 shadow-inner">
+                                <div id="confidenceBar" class="h-full rounded-full transition-all duration-1000 ease-out w-0 relative">
+                                    <div class="absolute top-0 right-0 bottom-0 left-0 bg-white/20 animate-pulse"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden canvas used for preprocessing the image -->
+    <canvas id="preprocessCanvas" width="224" height="224" class="hidden"></canvas>
+
+    <style>
+        @keyframes scan {
+            0% { transform: translateY(0); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(250px); opacity: 0; }
+        }
+    </style>
+
+    <script>
+        // --- Configuration ---
+        const CLASSES = ["No DR", "Mild DR", "Moderate DR", "Severe DR", "Proliferative DR"];
+        const MODEL_URL = 'https://huggingface.co/Shadow0482/iris-onnx/resolve/main/iris-vit.onnx';
+        
+        const DESCRIPTIONS = [
+            "No abnormalities detected. Retinal vascular structure appears intact. Annual routine screening is recommended to maintain baseline health.",
+            "Microaneurysms detected. This indicates early-stage stress on retinal vessels. Follow-up with an eye care professional is advised.",
+            "Moderate vascular distortion observed. Potential signs of exudates or localized swelling. A comprehensive evaluation by an ophthalmologist is recommended.",
+            "Significant vascular blockage and hemorrhaging detected. Retinal blood supply is compromised. Immediate medical consultation is strongly advised.",
+            "Critical: Neovascularization (fragile new blood vessel growth) detected. High risk of severe vision loss. Urgent medical intervention is required."
+        ];
+
+        const THEMES = [
+            { headerBg: 'bg-emerald-950/40', headerBorder: 'border-emerald-900/50', text: 'text-emerald-400', badgeBg: 'bg-emerald-900/50', badgeBorder: 'border-emerald-700/50', badgeText: 'text-emerald-300', barColor: 'bg-emerald-500' },
+            { headerBg: 'bg-amber-950/40', headerBorder: 'border-amber-900/50', text: 'text-amber-400', badgeBg: 'bg-amber-900/50', badgeBorder: 'border-amber-700/50', badgeText: 'text-amber-300', barColor: 'bg-amber-500' },
+            { headerBg: 'bg-orange-950/40', headerBorder: 'border-orange-900/50', text: 'text-orange-400', badgeBg: 'bg-orange-900/50', badgeBorder: 'border-orange-700/50', badgeText: 'text-orange-300', barColor: 'bg-orange-500' },
+            { headerBg: 'bg-rose-950/40', headerBorder: 'border-rose-900/50', text: 'text-rose-400', badgeBg: 'bg-rose-900/50', badgeBorder: 'border-rose-700/50', badgeText: 'text-rose-300', barColor: 'bg-rose-500' },
+            { headerBg: 'bg-red-950/60', headerBorder: 'border-red-900/50', text: 'text-red-500', badgeBg: 'bg-red-900/60', badgeBorder: 'border-red-700/50', badgeText: 'text-red-300', barColor: 'bg-red-600 shadow-[0_0_10px_#dc2626]' }
+        ];
+
+        let session = null;
+
+        const dom = {
+            status: { container: document.getElementById('statusContainer'), text: document.getElementById('statusText'), iconLoading: document.getElementById('statusIconLoading'), iconSuccess: document.getElementById('statusIconSuccess'), iconError: document.getElementById('statusIconError') },
+            upload: { dropzone: document.getElementById('dropzone'), content: document.getElementById('dropzoneContent'), input: document.getElementById('imageInput'), btn: document.getElementById('uploadBtn'), preview: document.getElementById('previewImage'), changeOverlay: document.getElementById('changeImageOverlay') },
+            results: { empty: document.getElementById('emptyResult'), loading: document.getElementById('loadingResult'), error: document.getElementById('errorResult'), errorText: document.getElementById('errorMsgText'), actual: document.getElementById('actualResult'), header: document.getElementById('resultHeader'), title: document.getElementById('resultTitle'), confidence: document.getElementById('resultConfidence'), description: document.getElementById('resultDescription'), confidenceBar: document.getElementById('confidenceBar'), confidenceNum: document.getElementById('confidenceNumber') },
+            canvas: document.getElementById('preprocessCanvas'),
+            ctx: document.getElementById('preprocessCanvas').getContext('2d')
+        };
+
+        async function loadModel() {
+            try {
+                // BUGFIX: CRITICAL STABILITY CONFIGURATION
+                // 1. Force explicit WASM paths to prevent 404s
+                ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
+                // 2. Disable multithreading (Prevents SharedArrayBuffer crash on non-isolated origins)
+                ort.env.wasm.numThreads = 1; 
+                // 3. Disable SIMD to prevent instruction set crashes on older mobile browsers
+                ort.env.wasm.simd = false;
+
+                // 4. Exclusively use 'wasm' to prevent WebGPU/WebGL from silently failing on complex ViT ops
+                session = await ort.InferenceSession.create(MODEL_URL, { 
+                    executionProviders: ['wasm'],
+                    graphOptimizationLevel: 'all'
+                });
+
+                updateStatus('bg-emerald-500/10', 'border-emerald-500/20', 'text-emerald-400', `✅ Model Loaded Successfully (WASM Backend)`, 'success');
+                
+                dom.upload.btn.disabled = false;
+                dom.upload.dropzone.classList.remove('opacity-50', 'cursor-not-allowed');
+                
+            } catch (error) {
+                console.error("Model Load Error:", error);
+                updateStatus('bg-rose-500/10', 'border-rose-500/20', 'text-rose-400', '❌ Download failed. Model may be blocked by network or CORS.', 'error');
+            }
+        }
+
+        function updateStatus(bgClass, borderClass, textClass, message, state) {
+            dom.status.container.className = `border-b px-4 py-3 flex items-center justify-center transition-colors duration-300 ${bgClass} ${borderClass}`;
+            dom.status.text.className = `text-xs sm:text-sm font-medium text-center ${textClass}`;
+            dom.status.text.textContent = message;
+            dom.status.iconLoading.classList.add('hidden');
+            dom.status.iconSuccess.classList.add('hidden');
+            dom.status.iconError.classList.add('hidden');
+            if (state === 'loading') dom.status.iconLoading.classList.remove('hidden');
+            if (state === 'success') dom.status.iconSuccess.classList.remove('hidden');
+            if (state === 'error') dom.status.iconError.classList.remove('hidden');
+        }
+
+              // Event Listeners
+        dom.upload.dropzone.addEventListener('click', () => { if (!dom.upload.btn.disabled) dom.upload.input.click(); });
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dom.upload.dropzone.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); }, false);
+        });
+
+        dom.upload.dropzone.addEventListener('dragover', () => dom.upload.dropzone.classList.add('border-indigo-500', 'bg-slate-800'));
+        dom.upload.dropzone.addEventListener('dragleave', () => dom.upload.dropzone.classList.remove('border-indigo-500', 'bg-slate-800'));
+        dom.upload.dropzone.addEventListener('drop', (e) => {
+            dom.upload.dropzone.classList.remove('border-indigo-500', 'bg-slate-800');
+            if (!dom.upload.btn.disabled && e.dataTransfer.files.length > 0) {
+                dom.upload.input.files = e.dataTransfer.files;
+                handleFileSelect(e.dataTransfer.files[0]);
+            }
+        });
+
+        dom.upload.input.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) handleFileSelect(e.target.files[0]);
+        });
+
+        function handleFileSelect(file) {
+            if (!file.type.match('image.*')) return alert("Please select a valid image file.");
+
+            const imageUrl = URL.createObjectURL(file);
+            dom.upload.preview.src = imageUrl;
+            dom.upload.preview.classList.remove('hidden');
+            dom.upload.content.classList.add('opacity-0');
+            dom.upload.changeOverlay.classList.remove('hidden');
+            
+            showResultView('loading');
+            
+            // Allow DOM to update before heavy synchronous JS blocks thread
+            setTimeout(() => {
+                if(dom.upload.preview.complete) {
+                    runInference(dom.upload.preview);
+                } else {
+                    dom.upload.preview.onload = () => runInference(dom.upload.preview);
+                }
+            }, 500);
+        }
+
+        function showResultView(view) {
+            dom.results.empty.classList.add('hidden');
+            dom.results.loading.classList.add('hidden');
+            dom.results.error.classList.add('hidden');
+            dom.results.actual.classList.add('hidden');
+            if (view === 'empty') dom.results.empty.classList.remove('hidden');
+            else if (view === 'loading') dom.results.loading.classList.remove('hidden');
+            else if (view === 'error') dom.results.error.classList.remove('hidden');
+            else if (view === 'actual') dom.results.actual.classList.remove('hidden');
+        }
+
+        function preprocessImage(imageElement) {
+            dom.ctx.clearRect(0, 0, 224, 224);
+            dom.ctx.drawImage(imageElement, 0, 0, 224, 224);
+            const imageData = dom.ctx.getImageData(0, 0, 224, 224).data;
+            const float32Data = new Float32Array(3 * 224 * 224);
+            const mean = [0.485, 0.456, 0.406];
+            const std = [0.229, 0.224, 0.225];
+
+            for (let i = 0; i < 224 * 224; i++) {
+                let r = imageData[i * 4] / 255.0;
+                let g = imageData[i * 4 + 1] / 255.0;
+                let b = imageData[i * 4 + 2] / 255.0;
+                float32Data[i] = (r - mean[0]) / std[0];                             
+                float32Data[224 * 224 + i] = (g - mean[1]) / std[1];                 
+                float32Data[2 * 224 * 224 + i] = (b - mean[2]) / std[2];             
+            }
+            return new ort.Tensor('float32', float32Data, [1, 3, 224, 224]);
+        }
+
+        function softmax(arr) {
+            const max = Math.max(...arr);
+            const exps = arr.map(x => Math.exp(x - max));
+            const sumExps = exps.reduce((a, b) => a + b, 0);
+            return exps.map(x => x / sumExps);
+        }
+
+        async function runInference(imageElement) {
+            if (!session) {
+                dom.results.errorText.innerText = "Model failed to load initially. Please refresh.";
+                return showResultView('error');
+            }
+
+            try {
+                const tensor = preprocessImage(imageElement);
+                const inputName = session.inputNames[0];
+                const feeds = {};
+                feeds[inputName] = tensor;
+
+                const results = await session.run(feeds);
+                const outputName = session.outputNames[0];
+                const outputData = results[outputName].data; 
+
+                const probs = softmax(Array.from(outputData));
+                
+                let maxIdx = 0; let maxProb = probs[0];
+                for (let i = 1; i < probs.length; i++) {
+                    if (probs[i] > maxProb) { maxProb = probs[i]; maxIdx = i; }
+                }
+                renderResults(maxIdx, maxProb);
+
+            } catch (error) {
+                console.error("Inference Error:", error);
+                dom.results.errorText.innerText = error.message || "An unknown error occurred during tensor processing.";
+                showResultView('error');
+            }
+        }
+
+        window.addEventListener('load', loadModel);
+    </script>
+</body>
+</html>
